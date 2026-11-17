@@ -1,0 +1,43 @@
+body.editflow-latest-preview { padding-bottom: calc(var(--editflow-latest-footer-height, 120px) + 24px); }
+.editflow-latest-footer {
+  position: static;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  color: var(--editflow-ui-text);
+  font: 15px/1.4 var(--editflow-ui-font);
+
+}
+.editflow-latest-status { display: flex; flex-direction: column; gap: 4px; margin-right: auto; }
+.editflow-latest-status span { font-size: 13px; }
+.editflow-latest-status .editflow-lock-holder { font-weight: 700; color: var(--editflow-ui-warning); }
+.editflow-latest-footer a.editflow-latest-edit,
+.editflow-latest-footer input.editflow-publish {
+  width: auto;
+  margin: 0;
+  padding: var(--editflow-ui-button-padding);
+  font: 700 15px/1.4 var(--editflow-ui-font);
+
+}
+.editflow-latest-footer input.editflow-publish { background: var(--editflow-ui-text); color: var(--editflow-ui-surface); }
+.editflow-latest-footer a.editflow-latest-edit:hover {
+  background: var(--editflow-ui-hover);
+  border-color: var(--editflow-ui-strong);
+  color: var(--editflow-ui-text);
+  text-decoration: none;
+  box-shadow: var(--editflow-ui-shadow);
+}
+.editflow-latest-footer input.editflow-publish:not(:disabled):hover {
+  background: var(--editflow-ui-primary-hover);
+  border-color: var(--editflow-ui-primary-hover);
+  color: var(--editflow-ui-surface);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 18%);
+}
+.editflow-latest-footer .editflow-publish-confirmation[hidden] { display: none; }
+@media (max-width: 700px) {
+  .editflow-latest-footer { padding: 10px 12px; gap: 8px;
+}
+  .editflow-latest-status { flex-basis: 100%; }
+}

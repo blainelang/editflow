@@ -1,0 +1,71 @@
+/* Loaded with Claro's Media Library only when EditFlow styling is enabled. */
+.ui-dialog.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close {
+  transform: none;
+  margin: -18px 0 0;
+  width: 36px;
+  height: 36px;
+  inset-inline-end: 12px;
+  background: var(--editflow-primary, #005eb8);
+  border: 0;
+}
+
+.media-library-widget-modal .media-library-wrapper {
+  flex-direction: column;
+  margin: 0;
+}
+
+.media-library-widget-modal .media-library-wrapper .media-library-menu {
+  display: flex;
+  flex-wrap: wrap;
+  width: auto;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+.media-library-widget-modal .media-library-menu__item::before,
+.media-library-widget-modal .media-library-menu__link::before,
+.media-library-widget-modal .media-library-menu__link::after {
+  display: none;
+}
+
+.media-library-widget-modal .media-library-wrapper .media-library-content {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.media-library-widget-modal .media-library-add-form__input-wrapper {
+  padding: 12px 16px;
+  box-shadow: none;
+}
+
+.media-library-widget-modal .media-library-add-form__input-wrapper .form-item {
+  margin-block: 8px;
+}
+
+.media-library-widget-modal .media-library-view .views-exposed-form {
+  padding: 12px 16px;
+  margin-block: 16px;
+  box-shadow: none;
+}
+
+.media-library-widget-modal .media-library-wrapper .view-header {
+  align-self: flex-start;
+  margin: 0 0 12px;
+  text-align: start;
+}
+
+.media-library-widget-modal .media-library-wrapper .views-display-link {
+  padding: 8px 18px;
+  margin: 0 8px 0 0;
+  background-image: none;
+  color: var(--editflow-primary, #005eb8);
+  line-height: 1.25;
+}
+
+.media-library-widget-modal .media-library-wrapper .views-display-link.is-active {
+  color: #fff;
+  background-color: var(--editflow-primary, #005eb8);
+}

@@ -1,0 +1,13 @@
+parameters:
+  level: 3
+  # Core FieldPluginBase::advancedRender() explicitly accepts render arrays.
+  stubFiles:
+    - tests/phpstan/views.stub
+  paths:
+    - src
+    - editflow.module
+  ignoreErrors:
+    # Deliberate adapter: core owns revision saving; covered by publication tests.
+    - message: '#extends @internal class Drupal\\content_moderation\\Form\\EntityModerationForm#'
+      path: src/Form/LatestPreviewForm.php
+      count: 1

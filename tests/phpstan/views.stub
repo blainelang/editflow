@@ -1,0 +1,19 @@
+<?php
+
+namespace Drupal\views\Plugin\views\field;
+
+use Drupal\views\ResultRow;
+
+interface FieldHandlerInterface {
+  /** @return string|\Drupal\Component\Render\MarkupInterface|array<mixed> */
+  public function render(ResultRow $values);
+}
+
+abstract class FieldPluginBase {
+  /** @return string|\Drupal\Component\Render\MarkupInterface|array<mixed> */
+  public function render(ResultRow $values);
+}
+
+namespace Drupal\views;
+
+class ResultRow {}

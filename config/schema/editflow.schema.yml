@@ -1,0 +1,55 @@
+editflow.settings:
+  type: config_object
+  label: 'EditFlow settings'
+  mapping:
+    workflows:
+      type: sequence
+      label: 'Enabled workflows'
+      sequence:
+        type: mapping
+        mapping:
+          id:
+            type: string
+            label: 'Workflow ID'
+          draft_state:
+            type: string
+            label: 'Working draft state'
+          publish_state:
+            type: string
+            label: 'Publication destination'
+          unpublish_state:
+            type: string
+            label: 'Unpublish destination'
+    draft_notice:
+      type: boolean
+      label: 'Pending draft notice'
+    layout_controls:
+      type: boolean
+      label: 'Layout Builder controls'
+    latest_preview:
+      type: boolean
+      label: 'Latest preview controls'
+    full_preview:
+      type: boolean
+      label: 'Full page preview'
+    editing_bar:
+      type: boolean
+      label: 'Frontend editing bar'
+    comparison:
+      type: boolean
+      label: 'Revision comparison enhancements'
+    revision_footer:
+      type: boolean
+      label: "revision footer"
+    media_library:
+      type: boolean
+      label: "Remember media display preference"
+    media_library_styling:
+      type: boolean
+      label: "EditFlow media picker styling"
+    preview_sharing:
+      type: boolean
+      label: "preview sharing"
+    unpublish:
+      type: boolean
+      label: "unpublish"

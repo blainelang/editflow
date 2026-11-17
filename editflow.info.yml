@@ -1,0 +1,10 @@
+name: EditFlow
+type: module
+description: 'Configurable draft, preview and Layout Builder editing improvements.'
+package: Content
+core_version_requirement: ^10.4 || ^11
+configure: editflow.configure
+dependencies:
+  - drupal:node
+  - drupal:content_moderation
+  - content_lock:content_lock

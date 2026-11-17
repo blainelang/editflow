@@ -1,0 +1,1000 @@
+<?php
+
+/**
+ * @file
+ * Integrates optional editorial controls with Drupal forms and rendering.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\editflow\Form\LatestPreviewForm;
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Cache\RefinableCacheableDependencyInterface;
+use Drupal\editflow\ContentLock\LayoutSaveIntegration;
+use Drupal\Core\Url;
+use Drupal\editflow\EditorialSettings;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Form\FormState;
+use Drupal\node\NodeInterface;
+
+/**
+ * Implements hook_views_pre_render().
+ */
+function editflow_views_pre_render(\Drupal\views\ViewExecutable $view): void {
+  foreach ($view->field ?? [] as $field) {
+    if ($field->getPluginId() === 'editflow_draft_updated') {
+      $view->element['#attached']['library'][] = 'editflow/content_columns';
+      break;
+    }
+  }
+}
+
+/**
+ * Implements hook_views_data_alter().
+ */
+function editflow_views_data_alter(array &$data): void {
+  $data['node_field_data']['revision_count'] = [
+    'title' => t('Revision count'),
+    'help' => t('The total number of revisions for a node.'),
+    'field' => ['id' => 'editflow_revision_count'],
+  ];
+  $data['node_field_data']['editflow_draft_status'] = [
+    'title' => t('Draft status'),
+    'help' => t('Indicates saved unpublished changes separately from the live publication status.'),
+    'field' => ['id' => 'editflow_draft_status'],
+  ];
+  $data['node_field_revision']['editflow_editing_lock'] = [
+    'title' => t('Editing lock'),
+    'help' => t('Shows whether an active editing lock exists and who holds it.'),
+    'field' => ['id' => 'editflow_editing_lock'],
+  ];
+  $data['node_field_data']['editflow_draft_updated'] = [
+    'title' => t('Draft updated'),
+    'help' => t('Save time and revision author of the latest pending draft.'),
+    'field' => ['id' => 'editflow_draft_updated'],
+  ];
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for ordinary node editing.
+ */
+function editflow_form_node_form_alter(array &$form, FormStateInterface $form_state): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  if (!$entity instanceof NodeInterface) {
+    return;
+  }
+  if (EditorialSettings::applies($entity)) {
+    editflow_unpublish_control($form, $form_state);
+    if (!$entity->isNew()) {
+      $publish_url = Url::fromRoute('editflow.publish_preview', ['node' => $entity->id()]);
+      if ($publish_url->access()) {
+        $publish_link = [
+          '#type' => 'link', '#title' => t('Publish content…'), '#url' => $publish_url,
+          '#attributes' => ['class' => ['button', 'button--primary']], '#weight' => -1,
+        ];
+        if (!isset($form['meta']['#access']) || $form['meta']['#access']) {
+          $form['meta']['editflow_publish'] = $publish_link;
+          $form['meta']['published']['#weight'] = -2;
+        }
+        else {
+          $form['editflow_publication'] = [
+            '#type' => 'details', '#title' => t('Publication'), '#group' => 'advanced',
+            '#open' => TRUE, '#weight' => -20, 'publish' => $publish_link,
+          ];
+        }
+      }
+    }
+    $form['#attributes']['data-editflow-unsaved-guard'] = 'true';
+    $form['#attributes']['data-editflow-unsaved-initial'] = ($form_state->get('has_been_previewed') || $form_state->getUserInput()) ? 'true' : 'false';
+    $form['#attached']['library'][] = 'editflow/unsaved_changes';
+    editflow_editing_footer($form, $form_state, FALSE);
+  }
+}
+
+/**
+ * Identifies saved pending changes using revision metadata, not node ownership.
+ */
+function editflow_draft_notice(array &$form, NodeInterface $entity): void {
+  if (!EditorialSettings::applies($entity, 'draft_notice') || $entity->isNew() || !isset($form['meta'])) {
+    return;
+  }
+  $info = \Drupal::service('content_moderation.moderation_information');
+  if (!$info->hasPendingRevision($entity)) {
+    return;
+  }
+  $storage = \Drupal::entityTypeManager()->getStorage('node');
+  $vid = $storage->getLatestTranslationAffectedRevisionId($entity->id(), $entity->language()->getId());
+  $draft = $storage->loadRevision($vid);
+  if (!$draft instanceof NodeInterface || $draft->isPublished()) {
+    return;
+  }
+  $author = $draft->getRevisionUser();
+  $form['meta']['editorial_draft_notice'] = [
+    '#type' => 'container',
+    '#weight' => -5,
+    '#attributes' => [
+      'class' => [
+        'messages',
+        'messages--warning',
+      ],
+      'data-editflow-message' => 'editorial.pending_draft',
+      'data-editflow-timeout' => '0',
+    ],
+    'title' => ['#type' => 'html_tag', '#tag' => 'strong', '#value' => t('Unpublished changes exist')],
+    'saved' => [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => t('Draft last saved by @name on @date.', [
+        '@name' => $author ? $author->getDisplayName() : t('Unknown user'),
+        '@date' => \Drupal::service('date.formatter')->format($draft->getRevisionCreationTime(), 'custom', 'M j, Y, g:i a T'),
+      ]),
+    ],
+    'help' => [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => (string) $entity->getRevisionId() === (string) $vid
+        ? t('This form shows the latest saved draft. These changes have not been published.')
+        : t('A newer saved draft exists. Review the latest version before making changes.'),
+    ],
+    '#cache' => ['max-age' => 0],
+  ];
+  $url = Url::fromRoute('entity.node.latest_version', ['node' => $entity->id()]);
+  if ($url->access()) {
+    $form['meta']['editorial_draft_notice']['preview'] = [
+      '#type' => 'link',
+      '#title' => t('Preview latest draft'),
+      '#url' => $url,
+      '#attributes' => ['target' => '_blank', 'rel' => 'noopener'],
+    ];
+  }
+  // Keep the notice before the metadata for every role. The metadata panel
+  // itself may be inaccessible to editors without administer nodes.
+  $form['editflow_draft_notice'] = $form['meta']['editorial_draft_notice'];
+  $form['editflow_draft_notice']['#group'] = 'advanced';
+  $form['editflow_draft_notice']['#weight'] = ($form['meta']['#weight'] ?? -10) - 1;
+  unset($form['meta']['editorial_draft_notice']);
+}
+
+/**
+ * Defaults an allowed moderation choice without overriding submitted input.
+ */
+function editflow_default_to_draft(array &$form, FormStateInterface $form_state): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  $draft_state = EditorialSettings::state($entity_form->getEntity(), 'draft_state');
+  if (!$draft_state) {
+    return;
+  }
+  $input = $form_state->getUserInput();
+  if (is_array($input['moderation_state'][0] ?? NULL) && array_key_exists('state', $input['moderation_state'][0])) {
+    return;
+  }
+  if (isset($form['moderation_state']['widget'][0]['state']['#options'][$draft_state])) {
+    $form['moderation_state']['widget'][0]['state']['#default_value'] = $draft_state;
+  }
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ */
+function editflow_form_node_layout_builder_form_alter(array &$form, FormStateInterface $form_state): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  if (!$entity instanceof NodeInterface || !\Drupal::hasService('content_moderation.moderation_information')) {
+    return;
+  }
+  $info = \Drupal::service('content_moderation.moderation_information');
+  if (!EditorialSettings::applies($entity, 'layout_controls')) {
+    return;
+  }
+  $form['#after_build'][] = 'editflow_layout_after_build';
+  editflow_editing_footer($form, $form_state, TRUE);
+  $form['actions']['discard_changes']['#value'] = t('Discard unsaved changes');
+  if (\Drupal::currentUser()->hasPermission('administer nodes')) {
+    $form['actions']['revert']['#value'] = t('Reset layout to template');
+  }
+  if (isset($form['revision_information'])) {
+    unset($form['revision_information']['#group']);
+    $form['revision_information']['#title'] = t('Describe your changes (optional)');
+    $form['revision_information']['#open'] = FALSE;
+    // No revision note widget is configured on this site's layout form.
+    // Keep mandatory revision values intact, but do not render an empty panel.
+    /** @var \Drupal\Core\Entity\ContentEntityTypeInterface $entity_type */
+    $entity_type = $entity->getEntityType();
+    $log_key = $entity_type->getRevisionMetadataKey('revision_log_message');
+    if (!$log_key || empty($form[$log_key]['widget']) || (isset($form[$log_key]['#access']) && !$form[$log_key]['#access'])) {
+      $form['revision_information']['#attributes']['class'][] = 'editflow-empty-revision';
+    }
+  }
+  $default = \Drupal::entityTypeManager()->getStorage('node')->load($entity->id());
+  $state = $info->getOriginalState($entity)->label();
+  $form['editorial_summary'] = [
+    '#type' => 'container',
+    '#weight' => -1100,
+    '#attributes' => ['class' => ['editflow-summary']],
+    'title' => [
+      '#markup' => '<strong>' . t('Editing: @title — @state', [
+        '@title' => $entity->label(),
+        '@state' => $state,
+      ]) . '</strong>',
+    ],
+    'help' => [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => $default && $default->isPublished()
+        ? t('Saving a draft leaves the published page unchanged. Only publishing updates the live page.')
+        : t('This page is not published. Saving a draft does not make it public.'),
+    ],
+    'revision' => [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => t('Saving creates a revision. Save your layout before previewing or sharing it.'),
+    ],
+  ];
+
+}
+
+/**
+ * Builds shared save controls without changing core save/validation handlers.
+ */
+function editflow_editing_footer(array &$form, FormStateInterface $form_state, bool $layout): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  $form['#editorial_layout'] = $layout;
+  $form['#process'][] = 'editflow_footer_process';
+  $form['#attributes']['class'][] = 'editflow-layout-form';
+  $form['#attached']['library'][] = 'editflow/layout';
+  if (!$layout) {
+    $form['#after_build'][] = 'editflow_footer_after_build';
+    $form['editorial_summary'] = [
+      '#type' => 'container',
+      '#weight' => 90,
+      '#attributes' => ['class' => ['editflow-summary']],
+    ];
+  }
+  editflow_default_to_draft($form, $form_state);
+  $draft = EditorialSettings::state($entity, 'draft_state');
+  $published = EditorialSettings::state($entity, 'publish_state');
+  $widget = &$form['moderation_state']['widget'][0]['state'];
+  $options = $widget['#options'] ?? [];
+  // Unpublishing is a separate confirmation action on this site; it must not
+  // turn the ordinary save-draft buttons into a publication-state selector.
+  $unpublished = EditorialSettings::state($entity, 'unpublish_state');
+  if ($unpublished && \Drupal::config('editflow.settings')->get('unpublish')) {
+    unset($options[$unpublished], $widget['#options'][$unpublished]);
+  }
+  // For the draft/publish workflow, publication is a separate saved-preview
+  // action. Preserve other workflow transitions and disabled-preview setups.
+  $account = \Drupal::currentUser();
+  $can_review = $account->hasPermission('view latest version')
+    && ($account->hasPermission('view any unpublished content')
+      || ($account->hasPermission('view own unpublished content') && (string) $entity->getOwnerId() === (string) $account->id()));
+  // Core's Latest Version route requires a pending revision. Without a live
+  // version, draft saves become default revisions, so retain the normal
+  // Publish transition in the form instead of requiring an inaccessible preview.
+  $live = $entity->isNew() ? NULL : \Drupal::entityTypeManager()->getStorage('node')->load($entity->id());
+  if (!$live || !$live->isPublished()) {
+    $can_review = FALSE;
+  }
+  $draft_only = isset($options[$draft]) && (!isset($options[$published]) || $can_review)
+    && EditorialSettings::applies($entity, 'latest_preview')
+    && !array_diff(array_keys($options), [$draft, $published]);
+  if ($draft_only) {
+    $widget['#options'] = [$draft => $options[$draft]];
+    $widget['#default_value'] = $draft;
+    $form['moderation_state']['#attributes']['class'][] = 'editflow-single-state';
+  }
+  else {
+    $form['editorial_workflow'] = [
+      '#type' => $layout ? 'container' : 'details',
+      '#title' => t('Workflow actions'),
+      '#open' => FALSE,
+      '#weight' => 89,
+      '#attributes' => ['class' => [$layout ? 'editflow-layout-workflow' : 'editflow-workflow']],
+    ];
+    $form['moderation_state']['#group'] = 'editorial_workflow';
+    if ($layout) {
+      $form['moderation_state']['widget'][0]['#attributes']['class'][] = 'editflow-state-row';
+    }
+  }
+  $selected = $draft_only ? $draft : ($form_state->getUserInput()['moderation_state'][0]['state'] ?? $widget['#default_value'] ?? '');
+  $form['#attributes']['data-draft-state'] = $draft;
+  $form['#attributes']['data-publish-state'] = $published;
+  $form['actions']['submit']['#value'] = $selected === $draft ? t('Save draft and finish editing') : ($selected === $published ? t('Publish and finish editing') : t('Save and finish editing'));
+  $form['actions']['submit']['#attributes']['data-editorial-save'] = 'true';
+  $form['actions']['editorial_continue'] = $form['actions']['submit'];
+  $form['actions']['editorial_continue']['#value'] = $selected === $draft ? t('Save draft and continue editing') : ($selected === $published ? t('Publish and continue editing') : t('Save and continue editing'));
+  $form['actions']['editorial_continue']['#name'] = 'editorial_continue';
+  $form['actions']['editorial_continue']['#weight'] = -1;
+  $form['actions']['editorial_continue']['#attributes']['data-editorial-continue'] = 'true';
+  unset($form['actions']['editorial_continue']['#attributes']['data-editorial-save']);
+  $info = \Drupal::service('content_moderation.moderation_information');
+  $state = $info->getOriginalState($entity)->label();
+  $form['actions']['editorial_status'] = [
+    '#type' => 'container',
+    '#weight' => -100,
+    '#attributes' => ['class' => ['editflow-layout-status']],
+    'title' => [
+      '#type' => 'html_tag',
+      '#tag' => 'strong',
+      '#value' => $layout ? t('Edit layout — @state', ['@state' => $state]) : t('Edit page details — @state', ['@state' => $state]),
+    ],
+    'note' => [
+      '#type' => 'html_tag',
+      '#tag' => 'span',
+      '#value' => t('Saved changes only'),
+      '#attributes' => ['class' => ['editflow-preview-note']],
+    ],
+  ];
+  if (!$entity->isNew()) {
+    $default = \Drupal::entityTypeManager()->getStorage('node')->load($entity->id());
+    $form['actions']['editorial_status']['publication'] = [
+      '#type' => 'html_tag',
+      '#tag' => 'span',
+      '#value' => $info->hasPendingRevision($entity)
+        ? ($default->isPublished() ? t('Unpublished changes · Live page unchanged') : t('Unpublished changes · Not live'))
+        : ($default->isPublished() ? t('Saving a draft leaves the live page unchanged.') : t('This page is not published.')),
+    ];
+    $url = Url::fromRoute('entity.node.latest_version', ['node' => $entity->id()]);
+    if ($url->access()) {
+      $form['actions']['editorial_preview'] = [
+        '#type' => 'link',
+        '#title' => t('Preview saved version ↗'),
+        '#url' => $url,
+        '#weight' => -2,
+        '#attributes' => ['class' => ['editflow-saved-preview'], 'target' => '_blank', 'rel' => 'noopener'],
+      ];
+    }
+    if ($discard = editflow_discard_link($entity)) {
+      $discard['#title'] = t('Delete unpublished revisions…');
+      $form['actions']['editorial_discard_drafts'] = $discard;
+    }
+    if (!$layout) {
+      $form['actions']['discard_changes'] = [
+        '#type' => 'submit',
+        '#value' => t('Discard unsaved changes'),
+        '#name' => 'editorial_discard',
+        '#limit_validation_errors' => [],
+        '#submit' => ['editflow_discard_details_submit'],
+        '#weight' => 10,
+        '#attributes' => ['class' => ['editflow-discard']],
+      ];
+    }
+  }
+}
+
+/**
+ * Completes submit handlers after all modules have altered the form.
+ */
+function editflow_footer_after_build(array $form, FormStateInterface $form_state): array {
+  LayoutSaveIntegration::configureContinue($form, $form_state);
+  if (isset($form['actions']['submit']['#submit'])) {
+    $handlers = &$form['actions']['submit']['#submit'];
+    if (!in_array('editflow_finish_editing_submit', $handlers, TRUE)) {
+      $handlers[] = 'editflow_finish_editing_submit';
+    }
+    if (!empty($form_state->getTriggeringElement()['#attributes']['data-editorial-save'])) {
+      $form_state->setTriggeringElement($form['actions']['submit']);
+    }
+  }
+  return $form;
+}
+
+/**
+ * Adds lock details after form alters but before child elements are processed.
+ */
+function editflow_footer_process(array $form, FormStateInterface $form_state): array {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  $form['actions']['#attributes']['class'][] = 'editflow-layout-actions';
+  $details = [
+    '#type' => 'details',
+    '#title' => t('Save details'),
+    '#open' => FALSE,
+    '#attributes' => ['class' => ['editflow-footer-details']],
+  ];
+  if (!$entity->isNew()) {
+    $author = $entity->getRevisionUser();
+    $details['saved'] = [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => t('Last saved by @name on @date.', [
+        '@name' => $author ? $author->getDisplayName() : t('Unknown user'),
+        '@date' => \Drupal::service('date.formatter')->format($entity->getRevisionCreationTime(), 'custom', 'M j, Y, g:i a T'),
+      ]),
+    ];
+    if (\Drupal::hasService('content_lock')) {
+      $lock_details = editflow_lock_panel([], $form_state);
+      if (($lock_details['#access'] ?? TRUE) && isset($lock_details['owner'])) {
+        $details['#title'] = t('Locked by @name · Details', ['@name' => $lock_details['#editorial_owner']]);
+        $details += array_intersect_key($lock_details, array_flip(['owner', 'timeout', 'unlock', 'help']));
+      }
+    }
+  }
+  editflow_draft_notice($form, $entity);
+  if (isset($form['editflow_draft_notice'])) {
+    $details['saved'] = $form['editflow_draft_notice']['saved'];
+    $details['draft_help'] = $form['editflow_draft_notice']['help'];
+    unset($form['editflow_draft_notice']);
+  }
+  $details['publishing'] = [
+    '#type' => 'html_tag',
+    '#tag' => 'p',
+    '#value' => t('Saving creates a revision. To publish, save your draft, then open Preview saved version and confirm publication.'),
+    '#access' => EditorialSettings::applies($entity, 'latest_preview'),
+  ];
+  $form['actions']['editorial_status']['details'] = $details;
+  // The shared details contain the same confirmation-based unlock action.
+  if (isset($details['unlock'])) {
+    unset($form['actions']['unlock']);
+  }
+  return $form;
+}
+
+/**
+ * Discards only unsaved Page Details values, retaining every saved revision.
+ */
+function editflow_discard_details_submit(array &$form, FormStateInterface $form_state): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  if (\Drupal::hasService('content_lock')) {
+    \Drupal::service('content_lock')->release($entity, $entity_form->getOperation(), (int) \Drupal::currentUser()->id());
+  }
+  $form_state->setIgnoreDestination(TRUE);
+  $form_state->setRedirectUrl($entity->toUrl());
+}
+
+/**
+ * Returns to the same editing screen after core has saved the changes.
+ *
+ * The continue button never invokes Content Lock's release submit handler.
+ */
+function editflow_continue_editing_submit(array &$form, FormStateInterface $form_state): void {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  // Ignore a destination query string so Continue stays in the editing session.
+  $form_state->setIgnoreDestination(TRUE);
+  $form_state->setRedirect($form['#editorial_layout'] ? 'layout_builder.overrides.node.view' : 'entity.node.edit_form', ['node' => $entity->id()]);
+}
+
+/**
+ * Opens the saved draft preview after saving and releasing the editing lock.
+ */
+function editflow_finish_editing_submit(array &$form, FormStateInterface $form_state): void {
+  $entity = $form_state->getFormObject()->getEntity();
+  if (!$entity instanceof NodeInterface || $entity->isPublished()
+    || !EditorialSettings::applies($entity, 'latest_preview')
+    || $entity->get('moderation_state')->value !== EditorialSettings::state($entity, 'draft_state')) {
+    return;
+  }
+  $url = Url::fromRoute('entity.node.latest_version', ['node' => $entity->id()], ['language' => $entity->language()]);
+  // Keep the normal save destination for editors who cannot view drafts.
+  if ($url->access()) {
+    $form_state->setIgnoreDestination(TRUE);
+    $form_state->setRedirectUrl($url);
+  }
+}
+
+/**
+ * Refines fully built controls without replacing core validation or submitters.
+ */
+function editflow_layout_after_build(array $form, FormStateInterface $form_state): array {
+  $form = editflow_footer_after_build($form, $form_state);
+  $form['actions']['#attributes']['class'][] = 'editflow-layout-actions';
+  $form['actions']['discard_changes']['#attributes']['class'][] = 'editflow-discard';
+  $form['actions']['preview_toggle']['toggle_content_preview']['#title'] = t('Show block content while editing');
+  // Hide the dangerous reset in the ordinary editor UI, not its access route.
+  if (!\Drupal::currentUser()->hasPermission('administer nodes')) {
+    $form['actions']['revert']['#access'] = FALSE;
+  }
+  $form['layout_builder_message']['#access'] = FALSE;
+  if (isset($form['revision_information'])) {
+    unset($form['revision_information']['#group']);
+    $form['revision_information']['#title'] = t('Describe your changes (optional)');
+    $form['revision_information']['#open'] = FALSE;
+    $form['revision_information']['#attributes']['class'][] = 'editflow-revision-details';
+    // A disabled, mandatory checkbox adds no choice; retain its form value.
+    if (!empty($form['revision']['#disabled'])) {
+      $form['revision']['#wrapper_attributes']['class'][] = 'editflow-required-revision';
+    }
+  }
+  return $form;
+}
+
+/**
+ * Explains Content Lock confirmation without replacing its handler.
+ */
+function editflow_form_break_lock_entity_alter(array &$form, FormStateInterface $form_state): void {
+  if (\Drupal::routeMatch()->getRouteName() !== 'content_lock.break_lock.node') {
+    return;
+  }
+  $form['submit']['#value'] = t('Confirm Lock Release');
+  $form['editorial_warning'] = [
+    '#type' => 'html_tag',
+    '#tag' => 'p',
+    '#weight' => -20,
+    '#value' => t('Releasing this lock does not save unsaved changes in any editing tab. Save your draft first. If another editor owns the lock, ask them to finish before releasing it; they may still have unsaved work.'),
+  ];
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function editflow_menu_local_tasks_alter(array &$data, $route_name, RefinableCacheableDependencyInterface &$cacheability): void {
+  $cacheability->addCacheContexts(['route']);
+  $cacheability->addCacheableDependency(\Drupal::config('editflow.settings'));
+  $node = \Drupal::routeMatch()->getParameter('node');
+  if (!$node instanceof NodeInterface) {
+    return;
+  }
+  $moderation = \Drupal::service('content_moderation.moderation_information');
+  if (!EditorialSettings::applies($node)) {
+    return;
+  }
+  $cacheability->addCacheableDependency($moderation->getWorkflowForEntity($node));
+  $cacheability->addCacheableDependency($node);
+  $default = \Drupal::entityTypeManager()->getStorage('node')->load($node->id());
+  $cacheability->addCacheableDependency($default);
+  $labels = [
+    'entity.node.canonical' => $default->isPublished() ? t('View live page') : t('View saved page'),
+    'entity.node.edit_form' => t('Edit Page Details'),
+    'entity.node.latest_version' => t('Preview - Latest Version'),
+    'layout_builder.overrides.node.view' => t('Edit Layout'),
+    'entity.node.preview_link_generate' => t('Share preview'),
+  ];
+  foreach ($data['tabs'] as &$tabs) {
+    foreach ($tabs as &$tab) {
+      if (isset($tab['#link']['url']) && $tab['#link']['url']->isRouted()) {
+        $route = $tab['#link']['url']->getRouteName();
+        if (isset($labels[$route])) {
+          $tab['#link']['title'] = $labels[$route];
+        }
+        // Keep layout editing ahead of the destructive Delete tab (weight 10),
+        // including in the administration theme where the editing bar is
+        // absent.
+        if ($route === 'layout_builder.overrides.node.view') {
+          $tab['#weight'] = 9;
+        }
+      }
+    }
+  }
+  // Admin-theme editing keeps its native tabs; use the same AJAX help dialog
+  // as the frontend editing bar without navigating away from unsaved fields.
+  if ($route_name === 'entity.node.edit_form' && \Drupal::service('router.admin_context')->isAdminRoute()) {
+    $help_url = Url::fromRoute('editflow.workflow_help');
+    $access = $help_url->access(NULL, TRUE);
+    $cacheability->addCacheableDependency($access);
+    if ($access->isAllowed()) {
+      $data['tabs'][0]['editflow.workflow_help'] = [
+        '#theme' => 'menu_local_task',
+        '#link' => [
+          'title' => t('Workflow help'),
+          'url' => $help_url,
+          'localized_options' => [
+            'attributes' => [
+              'class' => ['use-ajax', 'editflow-help-link', 'editflow-details-help'],
+              'data-dialog-type' => 'modal',
+              'data-dialog-options' => json_encode([
+                'width' => 760,
+                'classes' => ['ui-dialog' => 'editflow-help-dialog'],
+              ]),
+            ],
+          ],
+        ],
+        '#weight' => 1000,
+        '#attached' => ['library' => ['core/drupal.dialog.ajax', 'editflow/workflow_help']],
+      ];
+    }
+  }
+
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function editflow_form_node_preview_form_select_alter(array &$form, FormStateInterface $form_state): void {
+  if (!EditorialSettings::applies(\Drupal::routeMatch()->getParameter('node_preview'), 'full_preview')) {
+    return;
+  }
+  $form['#attributes']['class'][] = 'editflow-preview-controls';
+  $form['#attached']['library'][] = 'editflow/preview';
+  $form['view_mode'] = ['#type' => 'value', '#value' => 'full'];
+  $form['submit']['#access'] = FALSE;
+  $form['notice'] = [
+    '#type' => 'container',
+    '#weight' => -10,
+    '#attributes' => ['class' => ['editflow-preview-notice']],
+    'label' => ['#type' => 'html_tag', '#tag' => 'strong', '#value' => t('Preview — unsaved changes')],
+    'help' => ['#type' => 'html_tag', '#tag' => 'span', '#value' => t('Return to editing to save your draft.')],
+  ];
+  // Preserve core's URL, including the temporary-preview UUID and destination.
+  $form['backlink']['#title'] = t('Back to editing');
+  $form['backlink']['#options']['attributes']['class'][] = 'editflow-back';
+}
+
+/**
+ * Implements hook_preprocess_html().
+ */
+function editflow_preprocess_html(array &$variables): void {
+  $cache = CacheableMetadata::createFromRenderArray($variables);
+  $cache->addCacheContexts(['route', 'user.permissions']);
+  $node = \Drupal::routeMatch()->getParameter('node') ?? \Drupal::routeMatch()->getParameter('node_preview');
+  $cache->addCacheableDependency(EditorialSettings::cacheability($node));
+  $cache->applyTo($variables);
+  $route = \Drupal::routeMatch();
+  // Enhance existing, access-filtered local tasks only in the frontend theme.
+  if (!\Drupal::service('router.admin_context')->isAdminRoute() && EditorialSettings::applies($route->getParameter('node'), 'editing_bar')) {
+    $variables['#attached']['library'][] = 'editflow/editing_bar';
+    $help_url = Url::fromRoute('editflow.workflow_help');
+    if ($help_url->access()) {
+      $variables['#attached']['drupalSettings']['editflow']['workflowHelpUrl'] = $help_url->toString();
+      $variables['#attached']['library'][] = 'core/drupal.dialog.ajax';
+      $variables['#attached']['library'][] = 'editflow/workflow_help';
+    }
+  }
+  if ($route->getRouteName() === 'diff.revisions_diff' && EditorialSettings::applies($route->getParameter('node'), 'comparison')) {
+    $variables['attributes']['class'][] = 'editflow-comparison';
+    $variables['#attached']['library'][] = 'editflow/comparison';
+  }
+  if ($route->getRouteName() !== 'entity.node.preview' || !EditorialSettings::applies($route->getParameter('node_preview'), 'full_preview')) {
+    return;
+  }
+  $variables['attributes']['class'][] = 'editflow-preview';
+
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function editflow_form_content_moderation_entity_moderation_form_alter(array &$form, FormStateInterface $form_state): void {
+  editflow_revision_moderation_form_alter($form, $form_state);
+  // Target the core form itself so Layout Builder extra-field blocks are also
+  // covered. Nex's footer has a separate form ID and remains available.
+  $cache = CacheableMetadata::createFromRenderArray($form);
+  $cache->addCacheContexts(['route']);
+  $cache->addCacheTags(['config:editflow.settings']);
+  $cache->applyTo($form);
+  $entity = $form_state->get('entity');
+  $route = \Drupal::routeMatch();
+  $route_node = $route->getParameter('node');
+  if ($route->getRouteName() === 'entity.node.latest_version'
+    && $entity instanceof NodeInterface && $route_node instanceof NodeInterface
+    && (string) $route_node->id() === (string) $entity->id()
+    && EditorialSettings::applies($entity, 'latest_preview')) {
+    $form['#access'] = FALSE;
+  }
+}
+
+/**
+ * Implements hook_preprocess_page().
+ */
+function editflow_preprocess_page(array &$variables): void {
+  $cache = CacheableMetadata::createFromRenderArray($variables);
+  $cache->addCacheContexts(['route', 'user.permissions']);
+  $node = \Drupal::routeMatch()->getParameter('node') ?? \Drupal::routeMatch()->getParameter('node_preview');
+  $cache->addCacheableDependency(EditorialSettings::cacheability($node));
+  $cache->applyTo($variables);
+  $route = \Drupal::routeMatch();
+  $node = $route->getParameter('node');
+  if ($route->getRouteName() === 'entity.node.latest_version' && $node instanceof NodeInterface && \Drupal::hasService('content_moderation.moderation_information')) {
+    if (EditorialSettings::applies($node, 'latest_preview')) {
+      $footer_form_state = new FormState();
+      $footer_form_state->addBuildInfo('args', [$node]);
+      $variables['page']['content']['editflow_latest_footer'] = \Drupal::formBuilder()->buildForm(LatestPreviewForm::class, $footer_form_state);
+      $variables['page']['content']['#sorted'] = FALSE;
+    }
+  }
+  if ($route->getRouteName() !== 'diff.revisions_diff' || !EditorialSettings::applies($node, 'comparison')) {
+    return;
+  }
+  $panel = [
+    '#type' => 'container',
+    '#weight' => -100,
+    '#attributes' => ['class' => ['editflow-comparison-summary']],
+    '#cache' => ['contexts' => ['route', 'user.permissions'], 'tags' => $node->getCacheTags()],
+    'title' => [
+      '#type' => 'html_tag',
+      '#tag' => 'h1',
+      '#value' => t('Compare revisions: @title', [
+        '@title' => $node->label(),
+      ]),
+    ],
+    'description' => [
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => t('Revision @from → @to. This is a read-only comparison; viewing it does not change the published page.', [
+        '@from' => $route->getParameter('left_revision'),
+        '@to' => $route->getParameter('right_revision'),
+      ]),
+    ],
+    'links' => ['#type' => 'container', '#attributes' => ['class' => ['editflow-comparison-links']]],
+  ];
+  foreach ([
+    'entity.node.version_history' => t('Back to revisions'),
+    'entity.node.edit_form' => t('Edit Page Details'),
+    'layout_builder.overrides.node.view' => t('Edit page layout'),
+  ] as $name => $label) {
+    if (!\Drupal::service('router.route_provider')->getRoutesByNames([$name])) {
+      continue;
+    }
+    $url = Url::fromRoute($name, ['node' => $node->id()]);
+    $access = $url->access(NULL, TRUE);
+    CacheableMetadata::createFromRenderArray($panel)->addCacheableDependency($access)->applyTo($panel);
+    if ($access->isAllowed()) {
+      $panel['links'][$name] = ['#type' => 'link', '#title' => $label, '#url' => $url];
+    }
+  }
+  if ($route->getParameter('filter') === 'visual_inline') {
+    $panel['legend'] = [
+      '#type' => 'fieldset',
+      '#title' => t('Legend'),
+      '#attributes' => ['class' => ['editflow-comparison-legend']],
+      'indicators' => ['#markup' => '<span class="editflow-removed">' . t('Removed text') . '</span> <span class="editflow-added">' . t('Added text') . '</span>'],
+    ];
+  }
+  $variables['page']['content']['editflow_comparison'] = $panel;
+  // The block region may have been sorted before this preprocess hook.
+  $variables['page']['content']['#sorted'] = FALSE;
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function editflow_page_attachments(array &$attachments): void {
+  CacheableMetadata::createFromRenderArray($attachments)
+    ->addCacheableDependency(\Drupal::config('editflow.settings'))->applyTo($attachments);
+}
+
+/**
+ * Implements hook_help().
+ */
+function editflow_help($route_name, RouteMatchInterface $route_match) {
+  if ($route_name === 'help.page.editflow') {
+    return [
+      'description' => ['#markup' => '<p>' . t('Select workflows and interface features in EditFlow settings. Use existing roles or add site-specific roles through Drupal’s People administration. Installing EditFlow does not create roles or grant permissions. Workflow setup can add explicitly reviewed permissions to existing roles. Content Lock is required; configure protected content types separately. Optional Layout Builder, Media Library, Preview Link and Diff features retain their own access controls.') . '</p>'],
+      'views_help' => ['#markup' => '<p>' . t('Administrators with Administer views permission can open Content list columns on Interface settings and choose Review optional content list columns. Select the page displays to update: the setup adds only missing draft status/save details or editing lock columns. New columns appear before Operations. Existing fields and other view settings are preserved, and repeated runs do not duplicate columns. Export the affected Views configuration for deployment. Other custom views can add these fields manually through Views UI.') . '</p>'],
+      'settings' => [
+        '#type' => 'link',
+        '#title' => t('Configure EditFlow'),
+        '#url' => Url::fromRoute('editflow.configure'),
+      ],
+      'configuration_help' => \Drupal\editflow\Controller\ConfigurationHelpController::link(),
+      'workflow_help' => [
+        '#type' => 'link',
+        '#title' => t('Read editorial workflow help'),
+        '#url' => Url::fromRoute('editflow.workflow_help'),
+        '#prefix' => '<p>',
+        '#suffix' => '</p>',
+      ],
+    ];
+  }
+}
+
+/**
+ * Builds lock details after Content Lock has altered the form.
+ */
+function editflow_lock_panel(array $element, FormStateInterface $form_state): array {
+  /** @var \Drupal\Core\Entity\EntityFormInterface $entity_form */
+  $entity_form = $form_state->getFormObject();
+  /** @var \Drupal\node\NodeInterface $entity */
+  $entity = $entity_form->getEntity();
+  $service = \Drupal::service('content_lock');
+  $operation = $entity_form->getOperation();
+  $lock = $service->fetchLock($entity, $operation);
+  if (!$lock) {
+    $element['#access'] = FALSE;
+    return $element;
+  }
+  $owner = \Drupal::entityTypeManager()->getStorage('user')->load($lock->uid);
+  $name = $owner ? $owner->getDisplayName() : t('Unknown user');
+  $element['#title'] = t('Editing lock: @name', ['@name' => $name]);
+  $element['#editorial_owner'] = $name;
+  $element['owner'] = [
+    '#type' => 'html_tag',
+    '#tag' => 'p',
+    '#value' => t('Locked by @name. Lock age: @age.', [
+      '@name' => $name,
+      '@age' => \Drupal::service('date.formatter')->formatTimeDiffSince($lock->timestamp, ['granularity' => 2]),
+    ]),
+  ];
+  $timeout = (int) \Drupal::config('content_lock.settings')->get('timeout');
+  $element['timeout'] = [
+    '#type' => 'html_tag',
+    '#tag' => 'p',
+    '#value' => $timeout > 0
+      ? t('Lock timeout: @timeout from when the lock was last created or refreshed.', ['@timeout' => \Drupal::service('date.formatter')->formatInterval($timeout)])
+      : t('Automatic lock expiry is disabled.'),
+  ];
+  // Return to the view, not the edit form, which would acquire a new lock.
+  $release = $service->unlockButton($entity, $operation, $entity->toUrl()->toString());
+  $release['#access'] = $release['#url']->access();
+  $release['#title'] = t('Unlock');
+  $release['#attributes']['title'] = t('Opens confirmation. Unsaved changes will not be saved.');
+  $element['unlock'] = $release;
+  $element['help'] = [
+    '#type' => 'html_tag',
+    '#tag' => 'p',
+    '#value' => t('Unlocking requires confirmation and does not save unsaved changes.'),
+    '#access' => $release['#access'],
+  ];
+  return $element;
+}
+
+/**
+ * Builds the shared confirmation link without granting new permissions.
+ */
+function editflow_discard_link(NodeInterface $node): array {
+  $url = Url::fromRoute('editflow.discard_draft', ['node' => $node->id()]);
+  if ($node->isNew() || !$url->access()) {
+    return [];
+  }
+  return [
+    '#type' => 'link',
+    '#title' => t('Discard unpublished changes…'),
+    '#url' => $url,
+    '#attributes' => ['class' => ['editflow-discard-drafts']],
+    '#cache' => ['max-age' => 0],
+  ];
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Keeps historical revision views read-only; publication uses saved preview.
+ */
+function editflow_revision_moderation_form_alter(array &$form, FormStateInterface $form_state): void {
+    \Drupal\Core\Cache\CacheableMetadata::createFromRenderArray($form)
+        ->addCacheContexts(['route'])->applyTo($form);
+    if (!\Drupal::config('editflow.settings')->get('revision_footer')) { return; }
+    $route = \Drupal::routeMatch();
+    $revision = $route->getParameter('node_revision');
+    $entity = $form_state->get('entity');
+    if ($route->getRouteName() === 'entity.node.revision'
+        && $revision instanceof \Drupal\node\NodeInterface
+        && $entity instanceof \Drupal\node\NodeInterface
+        && (string) $entity->id() === (string) $revision->id()
+        && (string) $entity->getRevisionId() === (string) $revision->getRevisionId()) {
+        $form['#access'] = FALSE;
+    }
+}
+
+/**
+ * Implements hook_page_bottom().
+ */
+function editflow_page_bottom(array &$page_bottom): void {
+    $page_bottom['#cache']['tags'][] = 'config:editflow.settings';
+    if (!\Drupal::config('editflow.settings')->get('revision_footer')) { return; }
+    $route = \Drupal::routeMatch();
+    if ($route->getRouteName() !== 'entity.node.revision') {
+        return;
+    }
+    $revision = $route->getParameter('node_revision');
+    $current = $route->getParameter('node');
+    if (!$revision instanceof \Drupal\node\NodeInterface || !$current instanceof \Drupal\node\NodeInterface) {
+        return;
+    }
+    $revision = \Drupal::service('entity.repository')->getTranslationFromContext($revision);
+    $page_bottom['editflow_revision_footer'] = \Drupal\editflow\RevisionFooter::build($revision, $current);
+}
+
+/**
+ * Implements hook_field_widget_single_element_WIDGET_TYPE_form_alter().
+ */
+function editflow_field_widget_single_element_media_library_widget_form_alter(array &$element, FormStateInterface $form_state, array $context) {
+    if (!\Drupal::config('editflow.settings')->get('media_library')) { return; }
+    $state = $element['open_button']['#media_library_state'] ?? NULL;
+    if ($state instanceof \Drupal\media_library\MediaLibraryState && !$state->has('views_display_id')) {
+        $display = \Drupal::service('user.data')->get('editflow', \Drupal::currentUser()->id(), 'media_library_display');
+        $state->set('views_display_id', in_array($display, ['widget', 'widget_table'], TRUE) ? $display : 'widget_table');
+    }
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ */
+function editflow_unpublish_control(array &$form, FormStateInterface $form_state): void {
+    if (!\Drupal::config('editflow.settings')->get('unpublish')) { return; }
+    $node = $form_state->getFormObject()->getEntity();
+    // The status panel describes the revision being edited, not the live page.
+    if ($node->isNew() || !$node->isPublished() || !\Drupal::moduleHandler()->moduleExists('editflow')) {
+        return;
+    }
+    $live = \Drupal::entityTypeManager()->getStorage('node')->load($node->id());
+    if (\Drupal\editflow\Unpublish::access($live, \Drupal::currentUser())->isAllowed()) {
+        $form['meta']['editflow_unpublish'] = [
+            '#type' => 'link',
+            '#title' => t('Unpublish content…'),
+            '#url' => Url::fromRoute('editflow.unpublish', ['node' => $node->id()]),
+            '#attributes' => ['class' => ['button', 'button--danger']],
+            '#weight' => -1,
+        ];
+        $form['meta']['published']['#weight'] = -2;
+        // Core hides meta for non-admin editors. Give authorized publishers
+        // the action in the same sidebar without exposing admin-only fields.
+        if (isset($form['meta']['#access']) && !$form['meta']['#access']) {
+            $form['editflow_publication'] = [
+                '#type' => 'details', '#title' => t('Published'),
+                '#group' => 'advanced', '#open' => TRUE, '#weight' => -20,
+                'unpublish' => $form['meta']['editflow_unpublish'],
+            ];
+        }
+    }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function editflow_form_preview_link_entity_form_alter(array &$form, FormStateInterface $form_state): void {
+    if (!\Drupal::config('editflow.settings')->get('preview_sharing')) { return; }
+    $preview = $form_state->getFormObject()->getEntity();
+    if (isset($form['preview_link'])) {
+        $form['preview_link']['#description'] = t('A preview link is created automatically the first time you open this page. You do not need to click Save to create it. Save updates which content the link gives access to. Check the expiry below before sharing.');
+    }
+    $form['sharing_help'] = [
+        '#type' => 'item',
+        '#weight' => 90,
+        '#markup' => t('Save and regenerate preview link replaces the current link. Previously shared links and access granted through them stop working; recipients need the new link to regain preview access. To end sharing without a replacement link, choose Revoke shared preview access. Reset lifetime extends access; it does not revoke it.'),
+    ];
+    if (!$preview->isNew()) {
+        $form['actions']['revoke'] = [
+            '#type' => 'link',
+            '#title' => t('Revoke shared preview access'),
+            '#url' => Url::fromRoute('editflow.preview_revoke', ['preview_link' => $preview->id()]),
+            '#attributes' => ['class' => ['button', 'button--danger']],
+            '#weight' => 110,
+        ];
+    }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function editflow_form_media_library_add_form_oembed_alter(array &$form, FormStateInterface $form_state): void {
+    if (!\Drupal::config('editflow.settings')->get('media_library_styling')) { return; }
+    if (isset($form['container']['url'], $form['container']['submit'])) {
+        $form['container']['#attributes']['class'][] = 'editflow-media-url-entry';
+    }
+}
+
+/**
+ * Implements hook_editor_js_settings_alter().
+ */
+function editflow_editor_js_settings_alter(array &$settings): void {
+    if (!\Drupal::config('editflow.settings')->get('media_library_styling')) { return; }
+    foreach ($settings['editor']['formats'] ?? [] as $id => $format) {
+        $url = $format['editorSettings']['config']['drupalMedia']['libraryURL'] ?? NULL;
+        if (($format['editor'] ?? NULL) !== 'ckeditor5' || !is_string($url)) {
+            continue;
+        }
+        // Give the media table room while letting core constrain the dialog
+        // to the available viewport on smaller screens.
+        $settings['editor']['formats'][$id]['editorSettings']['config']['drupalMedia']['dialogSettings']['width'] = 1000;
+        $settings['editor']['formats'][$id]['editorSettings']['config']['drupalMedia']['dialogSettings']['maxWidth'] = '95%';
+
+    }
+}
+
+/**
+ * Implements hook_library_info_alter().
+ */
+function editflow_library_info_alter(array &$libraries, $extension) {
+    if (!\Drupal::config('editflow.settings')->get('media_library_styling')) { return; }
+    if ($extension === 'media_library' && isset($libraries['ui'])) {
+        $libraries['ui']['dependencies'][] = 'editflow/media_library';
+    }
+    if ($extension === 'claro' && isset($libraries['media_library.theme'])) {
+        $libraries['media_library.theme']['dependencies'][] = 'editflow/media_library_claro';
+    }
+}
+

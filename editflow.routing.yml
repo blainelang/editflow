@@ -1,0 +1,105 @@
+editflow.configuration_help:
+  path: '/admin/config/content/editflow/help/{section}'
+  defaults:
+    _controller: '\Drupal\editflow\Controller\ConfigurationHelpController::build'
+    _title: 'EditFlow configuration help'
+    section: 'workflow'
+  requirements:
+    _permission: 'administer site configuration'
+    section: 'workflow|interface'
+  options:
+    _admin_route: TRUE
+
+editflow.publish_preview:
+  path: '/node/{node}/publish-preview'
+  defaults:
+    _controller: '\Drupal\editflow\Controller\PublishPreviewController::build'
+    _title: 'Review and publish'
+  requirements:
+    _custom_access: '\Drupal\editflow\Controller\PublishPreviewController::access'
+  options:
+    parameters:
+      node:
+        type: entity:node
+
+editflow.workflow_help:
+  path: '/admin/content/editflow-help'
+  defaults:
+    _controller: '\Drupal\editflow\Controller\WorkflowHelpController::build'
+    _title: 'Content editing workflow'
+  requirements:
+    _permission: 'access content overview'
+  options:
+    _admin_route: TRUE
+
+editflow.settings:
+  path: '/admin/config/content/editflow/interface'
+  defaults:
+    _form: '\Drupal\editflow\Form\SettingsForm'
+    _title: 'EditFlow'
+  requirements:
+    _permission: 'administer site configuration'
+
+editflow.content_view_setup:
+  path: '/admin/config/content/editflow/interface/content-views'
+  defaults:
+    _form: '\Drupal\editflow\Form\ContentViewSetupForm'
+    _title: 'Add editorial columns to content views'
+  requirements:
+    _permission: 'administer views'
+    _module_dependencies: 'views'
+  options:
+    _admin_route: TRUE
+
+editflow.discard_draft:
+  path: '/node/{node}/discard-unpublished-changes'
+  defaults:
+    _form: '\Drupal\editflow\Form\DiscardDraftForm'
+    _title: 'Discard unpublished changes'
+  requirements:
+    _custom_access: 'editflow.draft_discard::access'
+  options:
+    _admin_route: TRUE
+    parameters:
+      node:
+        type: entity:node
+
+editflow.unpublish:
+  path: '/node/{node}/unpublish'
+  defaults:
+    _form: '\Drupal\editflow\Form\UnpublishForm'
+    _title: 'Unpublish content'
+  requirements:
+    _custom_access: '\Drupal\editflow\Unpublish::access'
+  options:
+    _admin_route: TRUE
+    parameters:
+      node:
+        type: entity:node
+
+editflow.preview_revoke:
+  path: '/admin/content/shared-preview/{preview_link}/revoke'
+  defaults:
+    _form: '\Drupal\editflow\Form\RevokePreviewForm'
+    _title: 'Revoke shared preview access'
+  requirements:
+    _permission: 'generate preview links'
+    _module_dependencies: 'preview_link'
+    _custom_access: '\Drupal\editflow\Form\RevokePreviewForm::access'
+  options:
+    _admin_route: TRUE
+    parameters:
+      preview_link:
+        type: entity:preview_link
+
+
+editflow.configure:
+  path: '/admin/config/content/editflow'
+  defaults:
+    _form: '\Drupal\editflow\Form\ConfigureEditflowForm'
+    _title: 'EditFlow'
+  requirements:
+    _custom_access: '\Drupal\editflow\Form\ConfigureEditflowForm::access'
+  options:
+    _admin_route: TRUE
+

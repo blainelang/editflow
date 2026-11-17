@@ -1,0 +1,76 @@
+/* Shared editorial primitives. Feature styles retain placement and sizing. */
+:root {
+  --editflow-ui-warning: #704616;
+  --editflow-ui-strong: #37474f;
+  --editflow-ui-danger: #a12622;
+  --editflow-ui-danger-hover: #781c19;
+  --editflow-ui-text: #263238;
+  --editflow-ui-surface: #fff;
+  --editflow-ui-panel: #f6f8f9;
+  --editflow-ui-border: #d6dde0;
+  --editflow-ui-button-border: #87959d;
+  --editflow-ui-accent: #005eb8;
+  --editflow-ui-action: #005eb8;
+  --editflow-ui-action-hover: #004785;
+  --editflow-ui-action-tint: #e5f1fc;
+  --editflow-ui-muted: #4b5964;
+  --editflow-ui-focus: #0077af;
+  --editflow-ui-hover: #e8eef1;
+  --editflow-ui-primary-hover: #405761;
+  --editflow-ui-link: #005b86;
+  --editflow-ui-radius: 4px;
+  --editflow-ui-font: Arial, sans-serif;
+  --editflow-ui-button-padding: 10px 16px;
+  --editflow-ui-footer-padding: 14px 24px calc(14px + env(safe-area-inset-bottom));
+  --editflow-ui-shadow: 0 2px 5px rgb(0 0 0 / 12%);
+  --editflow-ui-footer-shadow: 0 -3px 16px rgb(0 0 0 / 12%);
+}
+.editflow-summary .editflow-lock > a.button,
+.editflow-layout-actions a.editflow-release-lock,
+.editflow-latest-footer a.editflow-latest-edit,
+.editflow-latest-footer input.editflow-publish,
+.editflow-comparison-links a,
+.editflow-comparison .diff-navigation__link a {
+  display: inline-block;
+  border: 1px solid var(--editflow-ui-button-border);
+  border-radius: var(--editflow-ui-radius);
+  background: var(--editflow-ui-surface);
+  color: var(--editflow-ui-text);
+  text-decoration: none;
+}
+.editflow-layout-actions,
+.editflow-latest-footer,
+.editflow-preview .node-preview-container {
+  padding: var(--editflow-ui-footer-padding);
+  background: var(--editflow-ui-surface);
+  border-top: 3px solid var(--editflow-ui-accent);
+  box-shadow: var(--editflow-ui-footer-shadow);
+}
+.editflow-summary,
+.editflow-comparison-summary,
+.editflow-comparison details.editflow-comparison-options {
+  border: 1px solid var(--editflow-ui-border);
+  border-radius: var(--editflow-ui-radius);
+  background: var(--editflow-ui-panel);
+  color: var(--editflow-ui-text);
+  font: 15px/1.5 var(--editflow-ui-font);
+}
+
+/* Fixed positioning and the matching body space are enabled together by JS. */
+.editflow-latest-footer.editflow-fixed-footer,
+.editflow-layout-actions.editflow-fixed-footer {
+  position: fixed;
+  bottom: 0;
+  left: var(--drupal-displace-offset-left, 0px);
+  right: var(--drupal-displace-offset-right, 0px);
+  z-index: 501;
+}
+
+.editflow-summary .editflow-lock > a.button:focus-visible,
+.editflow-layout-actions :focus-visible,
+.editflow-latest-footer :focus-visible,
+.editflow-preview a.editflow-back:focus-visible,
+.editflow-comparison-options > summary:focus-visible,
+.editflow-comparison-links a:focus-visible,
+.editflow-comparison .diff-header a:focus-visible,
+.editflow-comparison .editflow-video-card a:focus-visible { outline: 3px solid var(--editflow-ui-focus); outline-offset: 3px; }

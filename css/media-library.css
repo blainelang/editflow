@@ -1,0 +1,284 @@
+/* Grid structure must not depend on an administration theme supplying it. */
+.media-library-widget-modal :is(.media-library-views-form__rows, .js-media-library-views-form):has(> div.js-media-library-item) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: 16px;
+}
+
+.media-library-widget-modal div.js-media-library-item.views-row {
+  position: relative;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--editflow-ui-border, #ccd2d8);
+  border-radius: 4px;
+}
+
+.media-library-widget-modal div.js-media-library-item.views-row.checked {
+  border-color: var(--editflow-ui-action);
+  background: var(--editflow-ui-action-tint);
+}
+
+.media-library-widget-modal div.js-media-library-item.views-row:focus-within {
+  outline: 2px solid var(--editflow-ui-action);
+  outline-offset: 2px;
+}
+
+.media-library-widget-modal div.js-media-library-item.views-row .js-media-library-item-preview img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 160px;
+  object-fit: contain;
+}
+
+.media-library-widget-modal div.js-media-library-item.views-row article {
+  overflow-wrap: anywhere;
+}
+
+.media-library-widget-modal .js-media-library-views-form:has(> div.js-media-library-item) > :not(.js-media-library-item) {
+  grid-column: 1 / -1;
+}
+
+/* Keep the picker controls consistent in both frontend and admin themes. */
+.ui-dialog.media-library-widget-modal {
+  /* Keep every media type and AJAX response at the same width, even when
+   * core supplies a different inline dialog width on a subsequent request. */
+  width: min(1000px, calc(100vw - 32px)) !important;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+}
+
+.media-library-widget-modal input[type="file"] {
+  height: auto;
+  min-height: 48px;
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+
+.media-library-widget-modal input[type="file"]::file-selector-button {
+  margin-right: 10px;
+}
+
+.media-library-widget-modal .editflow-media-url-entry {
+  margin-bottom: 20px;
+}
+
+@media (max-width: 767px) {
+  .media-library-widget-modal .editflow-media-url-entry {
+    padding-bottom: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .media-library-widget-modal .editflow-media-url-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 16px;
+    align-items: center;
+  }
+
+  .media-library-widget-modal .editflow-media-url-entry > .form-item {
+    display: contents;
+  }
+
+  .media-library-widget-modal .editflow-media-url-entry .form-item > * {
+    grid-column: 1;
+  }
+
+  .media-library-widget-modal .editflow-media-url-entry input[type="url"] {
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .media-library-widget-modal .editflow-media-url-entry > .form-submit {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+}
+
+.media-library-widget-modal th > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--editflow-ui-action);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
+}
+
+.media-library-widget-modal th > a:hover {
+  color: var(--editflow-ui-action-hover);
+}
+
+.media-library-widget-modal th > a:focus-visible {
+  outline: 3px solid var(--editflow-ui-action);
+  outline-offset: 3px;
+}
+
+.media-library-widget-modal th:not([aria-sort]) > a::after {
+  content: "\2195";
+  font-size: 18px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.media-library-widget-modal .views-exposed-form .form--inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+}
+
+.media-library-widget-modal .views-exposed-form .form--inline > .form-item,
+.media-library-widget-modal .views-exposed-form .form--inline > .form-actions,
+.media-library-widget-modal .views-exposed-form .form--inline > [data-drupal-selector="edit-actions"] {
+  float: none;
+  clear: none;
+  margin: 0;
+}
+
+.media-library-widget-modal .views-exposed-form .form-actions .form-submit {
+  margin: 0;
+}
+
+.media-library-widget-modal .views-exposed-form .form-item {
+  max-width: 100%;
+}
+
+.media-library-widget-modal .views-exposed-form input,
+.media-library-widget-modal .views-exposed-form select {
+  max-width: 100%;
+}
+
+.media-library-widget-modal .js-media-library-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.media-library-widget-modal .js-media-library-menu li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-library-widget-modal .views-display-link,
+.media-library-widget-modal .js-media-library-menu a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin: 0 6px 12px 0;
+  padding: 8px 18px;
+  border: 2px solid var(--editflow-ui-action);
+  border-radius: 4px;
+  background: var(--editflow-ui-surface);
+  color: var(--editflow-ui-action);
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  box-shadow: none;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.media-library-widget-modal .js-media-library-menu a {
+  margin: 0;
+}
+
+.media-library-widget-modal .views-display-link:hover,
+.media-library-widget-modal .js-media-library-menu a:hover {
+  background: var(--editflow-ui-action-tint);
+  color: var(--editflow-ui-action-hover);
+  text-decoration: none;
+}
+
+.media-library-widget-modal .views-display-link.is-active,
+.media-library-widget-modal .js-media-library-menu a.active {
+  background: var(--editflow-ui-action);
+  color: var(--editflow-ui-surface);
+  box-shadow: none;
+}
+
+.media-library-widget-modal .views-display-link.is-active:hover,
+.media-library-widget-modal .js-media-library-menu a.active:hover {
+  background: var(--editflow-ui-action-hover);
+}
+
+.media-library-widget-modal .views-display-link:focus-visible,
+.media-library-widget-modal .js-media-library-menu a:focus-visible,
+.media-library-widget-modal .ui-dialog-titlebar-close:focus-visible {
+  outline: 3px solid var(--editflow-ui-action);
+  outline-offset: 3px;
+}
+
+.media-library-widget-modal .ui-dialog-titlebar {
+  position: relative;
+  min-height: 48px;
+  padding-right: 60px;
+}
+
+.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close {
+  display: block !important;
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--editflow-ui-action);
+  color: var(--editflow-ui-surface);
+  opacity: 1;
+  box-shadow: none;
+  text-indent: -9999px;
+  overflow: hidden;
+  transition: background-color 160ms ease;
+}
+
+.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close:hover {
+  background: var(--editflow-ui-action-hover);
+  opacity: 1;
+}
+
+/* Draw the cross without an icon font or a theme-dependent image sprite.
+ * Keep the original button and its accessible Close name intact. */
+.media-library-widget-modal .ui-dialog-titlebar-close .ui-icon {
+  display: none;
+}
+
+.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close::before,
+.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close::after {
+  content: "" !important;
+  position: absolute;
+  top: 17px;
+  left: 9px;
+  width: 18px;
+  height: 2px;
+  margin: 0;
+  background: var(--editflow-ui-surface);
+  transform: rotate(45deg);
+}
+
+.media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close::after {
+  transform: rotate(-45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-library-widget-modal .views-display-link,
+  .media-library-widget-modal .js-media-library-menu a,
+  .media-library-widget-modal .ui-dialog-titlebar .ui-dialog-titlebar-close {
+    transition: none;
+  }
+}

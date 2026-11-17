@@ -1,0 +1,24 @@
+<?php
+
+/**
+ * @file
+ * Supplies isolated fixtures for editorial integration tests.
+ */
+
+/**
+ * Adds a validation failure to the real Layout Builder form for testing.
+ */
+
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function editflow_test_form_node_layout_builder_form_alter(array &$form, FormStateInterface $form_state): void {
+  $form['test_required'] = [
+    '#type' => 'textfield',
+    '#title' => 'Required test value',
+    '#required' => TRUE,
+    '#default_value' => 'valid',
+  ];
+}

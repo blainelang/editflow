@@ -1,0 +1,12 @@
+workflows: []
+draft_notice: true
+layout_controls: true
+latest_preview: true
+full_preview: true
+editing_bar: false
+comparison: false
+revision_footer: false
+media_library: false
+media_library_styling: false
+preview_sharing: false
+unpublish: false

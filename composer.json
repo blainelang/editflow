@@ -1,0 +1,14 @@
+{
+  "name": "drupal/editflow",
+  "description": "Configurable editorial workflow interface",
+  "type": "drupal-module",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "drupal/core": "^10.4 || ^11",
+    "drupal/content_lock": "^3.0"
+  },
+  "suggest": {
+    "drupal/diff": "Revision comparisons",
+    "drupal/preview_link": "Tokenized shared previews"
+  }
+}

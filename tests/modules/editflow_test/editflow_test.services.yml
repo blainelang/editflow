@@ -1,0 +1,6 @@
+services:
+  editflow_test.release_counter:
+    class: Drupal\editflow_test\ReleaseCounter
+    arguments: ['@state']
+    tags:
+      - { name: event_subscriber }

@@ -1,0 +1,13 @@
+services:
+  editflow.preview_routes:
+    class: Drupal\editflow\Routing\PreviewRouteSubscriber
+    tags:
+      - { name: event_subscriber }
+  editflow.draft_discard:
+    class: Drupal\editflow\DraftDiscard
+    arguments: ['@entity_type.manager', '@database', '@tempstore.shared', '@?content_lock', '@?plugin.manager.layout_builder.section_storage', '@?layout_builder.tempstore_repository']
+  editflow.media_library_preference:
+    class: Drupal\editflow\EventSubscriber\MediaLibraryPreference
+    arguments: ['@current_user', '@user.data']
+    tags:
+      - { name: event_subscriber }

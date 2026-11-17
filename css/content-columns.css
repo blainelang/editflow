@@ -1,0 +1,12 @@
+/* Reserve room for the heading and date without stretching the author line. */
+table th.views-field-editflow-draft-updated,
+table th.views-field-editflow-draft-updated a,
+table td.views-field-editflow-draft-updated time {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+table .views-field-editflow-draft-updated {
+  min-width: 11rem;
+}

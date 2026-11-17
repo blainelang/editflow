@@ -1,0 +1,11 @@
+editflow.configure:
+  title: 'Workflow setup'
+  route_name: editflow.configure
+  base_route: editflow.configure
+  weight: 0
+
+editflow.settings:
+  title: 'Interface settings'
+  route_name: editflow.settings
+  base_route: editflow.configure
+  weight: 10

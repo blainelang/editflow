@@ -1,0 +1,112 @@
+ui:
+  js:
+    js/ui.js: {}
+  css:
+    theme:
+      css/ui.css: {}
+  dependencies:
+    - core/drupal
+
+workflow_help:
+  dependencies:
+    - editflow/ui
+    - core/jquery
+    - core/drupal
+    - core/once
+  js:
+    js/workflow-help.js: {}
+  css:
+    theme:
+      css/workflow-help.css: {}
+editing_bar:
+  css:
+    theme:
+      css/editing-bar.css: {}
+  js:
+    js/editing-bar.js: {}
+  dependencies:
+    - editflow/ui
+    - core/drupal
+    - core/once
+preview:
+  css:
+    theme:
+      css/preview.css: {}
+  dependencies:
+    - editflow/ui
+
+latest_preview:
+  css:
+    theme:
+      css/latest-preview.css: {}
+  js:
+    js/latest-preview.js: {}
+  dependencies:
+    - editflow/ui
+    - core/drupal
+    - core/once
+comparison:
+  css:
+    theme:
+      css/comparison.css: {}
+  js:
+    js/comparison.js: {}
+  dependencies:
+    - editflow/ui
+    - diff/diff.general
+    - core/drupal
+    - core/once
+layout:
+  css:
+    theme:
+      css/layout.css: {}
+  js:
+    js/layout.js: {}
+  dependencies:
+    - editflow/ui
+    - core/drupal
+    - core/once
+
+unsaved_changes:
+  js:
+    js/unsaved-changes.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery
+    - core/once
+    - core/drupal.form
+
+media_library:
+  css:
+    theme:
+      css/media-library.css: {}
+  js:
+    js/media-library.js: {}
+  dependencies:
+    - editflow/ui
+    - core/drupal
+    - core/jquery
+    - core/drupal.dialog
+
+media_library_claro:
+  css:
+    theme:
+      css/media-library-claro.css: {}
+  dependencies:
+    - editflow/media_library
+
+content_columns:
+  css:
+    theme:
+      css/content-columns.css: {}
+
+revision_footer:
+  css:
+    theme:
+      css/revision-footer.css: {}
+  js:
+    js/revision-footer.js: {}
+  dependencies:
+    - editflow/ui
+    - core/drupal
+    - core/once

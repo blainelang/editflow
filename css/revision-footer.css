@@ -1,0 +1,50 @@
+.editflow-revision-footer-space { flex-shrink: 0; }
+.editflow-revision-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom));
+  border-top: 2px solid var(--editflow-ui-action);
+  background: var(--editflow-ui-panel);
+  color: var(--editflow-ui-text);
+  font: 14px/1.45 Arial, sans-serif;
+}
+.editflow-revision-footer-space.is-fixed .editflow-revision-footer {
+  position: fixed;
+  bottom: 0;
+  left: var(--drupal-displace-offset-left, 0px);
+  right: var(--drupal-displace-offset-right, 0px);
+  z-index: 501;
+}
+.editflow-revision-footer__info {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+}
+.editflow-revision-footer__info strong { color: var(--editflow-ui-action-hover); }
+.editflow-revision-footer__info small { flex-basis: 100%; color: var(--editflow-ui-muted); font-size: 12px; }
+.editflow-revision-footer a.editflow-revision-footer__live {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--editflow-ui-action);
+  border-radius: 4px;
+  background: var(--editflow-ui-action);
+  color: var(--editflow-ui-surface);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+.editflow-revision-footer a.editflow-revision-footer__live:hover { background: var(--editflow-ui-action-hover); }
+.editflow-revision-footer a.editflow-revision-footer__live:focus-visible { outline: 3px solid var(--editflow-ui-action); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .editflow-revision-footer { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); gap: 8px; }
+  /* On phones the administration tray overlays the page rather than leaving
+   * enough room for a second, very narrow footer beside it. */
+  .editflow-revision-footer-space.is-fixed .editflow-revision-footer { left: 0; right: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .editflow-revision-footer a.editflow-revision-footer__live { transition: none; }
+}

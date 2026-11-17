@@ -1,0 +1,71 @@
+/* Keep editorial controls clear of the frontend header and Drupal toolbar. */
+body.editflow-preview {
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
+
+.editflow-preview .node-preview-container {
+  position: fixed;
+  top: auto;
+  bottom: 0;
+  left: var(--drupal-displace-offset-left, 0px);
+  right: var(--drupal-displace-offset-right, 0px);
+  z-index: 501;
+  width: auto;
+  color: var(--editflow-ui-text);
+  font: 16px/1.4 var(--editflow-ui-font);
+
+}
+
+.editflow-preview .editflow-preview-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.editflow-preview .editflow-preview-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.editflow-preview-notice span {
+  font-size: 14px;
+  color: var(--editflow-ui-muted);
+}
+
+.editflow-preview a.editflow-back {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border: 2px solid var(--editflow-ui-text);
+  border-radius: var(--editflow-ui-radius);
+  background: var(--editflow-ui-text);
+  color: var(--editflow-ui-surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.editflow-preview a.editflow-back:hover {
+  background: var(--editflow-ui-primary-hover);
+}
+
+@media (max-width: 600px) {
+  body.editflow-preview {
+    padding-bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+  .editflow-preview .node-preview-container {
+    padding-inline: 16px;
+
+}
+  .editflow-preview .editflow-preview-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .editflow-preview a.editflow-back {
+    text-align: center;
+  }
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="EditFlow">
+  <description>Drupal standards for EditFlow production code and tests.</description>
+  <arg name="extensions" value="php,module,inc"/>
+  <file>src</file>
+  <file>editflow.module</file>
+  <file>tests/src</file>
+  <file>tests/modules</file>
+  <rule ref="Drupal"/>
+  <rule ref="DrupalPractice"/>
+</ruleset>
