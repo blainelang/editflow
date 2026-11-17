@@ -1,0 +1,10 @@
+/* Local unsaved-settings notice, independent of theme message dismissal. */
+.editflow-settings-warning {
+  margin-block: .75rem;
+  padding: .75rem 1rem;
+  border-inline-start: 4px solid #a66b00;
+  background: #fff4ce;
+  color: #493600;
+  line-height: 1.5;
+}
+.editflow-settings-warning[hidden] { display: none; }

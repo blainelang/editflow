@@ -21,6 +21,7 @@ final class EditflowSetup {
       }
     }
     $data['views.view.media_library'] = $factory->get('views.view.media_library')->getRawData();
+    $data['content_lock.settings'] = $factory->get('content_lock.settings')->getRawData();
     $data['editflow.settings'] = $factory->get('editflow.settings')->getRawData();
     ksort($data);
     return hash('sha256', serialize($data));
@@ -71,6 +72,13 @@ final class EditflowSetup {
         $add[] = $bundle;
       }
     }
+    // Lock protection is an explicit additive operation for selected types only.
+    // Never rewrite timeout, translation scope or per-form operation settings.
+    $lock_add = [];
+    $protected = \Drupal::config('content_lock.settings')->get('types.node') ?? [];
+    if (!empty($choices['protect_content']) && !empty($choices['enhancements']) && !in_array('*', $protected, TRUE)) {
+      $lock_add = array_values(array_diff($bundles, $protected));
+    }
     // Include previously assigned bundles in the permission review, even if
     // omitted from submitted checkboxes. Unchecking never removes moderation.
     $bundles = array_values(array_unique(array_merge($bundles, $plugin->getBundlesForEntityType('node'))));
@@ -100,7 +108,7 @@ final class EditflowSetup {
       }
     }
     foreach ($grants as &$permissions) { $permissions = array_values(array_unique($permissions)); }
-    return ['workflow' => $workflow->id(), 'add' => $add, 'bundles' => $bundles, 'grants' => $grants, 'fingerprint' => self::fingerprint()];
+    return ['workflow' => $workflow->id(), 'add' => $add, 'bundles' => $bundles, 'grants' => $grants, 'lock_add' => $lock_add, 'fingerprint' => self::fingerprint()];
   }
 
   public static function apply(array $choices, string $expected): array {
@@ -117,6 +125,10 @@ final class EditflowSetup {
       $role = Role::load($id);
       foreach ($permissions as $permission) { $role->grantPermission($permission); }
       $role->save();
+    }
+    if ($plan['lock_add']) {
+      $locks = \Drupal::configFactory()->getEditable('content_lock.settings');
+      $locks->set('types.node', array_values(array_unique(array_merge($locks->get('types.node') ?? [], $plan['lock_add']))))->save();
     }
     if (!empty($choices['media_table'])) { MediaLibrarySetup::apply(); }
     $config = \Drupal::configFactory()->getEditable('editflow.settings');

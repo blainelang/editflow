@@ -110,3 +110,13 @@ revision_footer:
     - editflow/ui
     - core/drupal
     - core/once
+
+settings_warning:
+  js:
+    js/settings-warning.js: {}
+  css:
+    theme:
+      css/settings-warning.css: {}
+  dependencies:
+    - core/drupal
+    - core/once

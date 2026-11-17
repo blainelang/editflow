@@ -187,4 +187,61 @@ class ConfigureEditflowTest extends BrowserTestBase {
     EditflowSetup::apply($choices, $plan['fingerprint']);
   }
 
+  public function testReviewedLockProtectionPreservesClientSettings(): void {
+    $this->drupalCreateContentType(['type' => 'article']);
+    $this->drupalCreateContentType(['type' => 'page']);
+    $this->createBasicWorkflow();
+    $this->drupalLogin($this->rootUser);
+    $locks = $this->config('content_lock.settings');
+    $locks->set('types.node', ['page'])->set('timeout', 7200)
+      ->set('types_translation_lock', ['node'])
+      ->set('form_op_lock.node', ['mode' => 1, 'values' => ['edit']])->save();
+    $before = $locks->getRawData();
+    $this->drupalGet('/admin/config/content/editflow');
+    $this->assertSession()->checkboxChecked('protect_content');
+    $this->assertSession()->pageTextContains('Enhancements are not enabled for this workflow.');
+    $this->assertSession()->pageTextContains('Click Review changes below to see the additions before applying.');
+    $this->assertSession()->pageTextContains('Not assigned — select to add');
+    $this->submitForm([
+      'enhancements' => TRUE, 'bundles[article]' => TRUE,
+    ], 'Review changes');
+    $this->assertSession()->pageTextContains('Content types to protect with editing locks');
+    $this->assertSame($before, $this->config('content_lock.settings')->getRawData());
+    $this->submitForm([], 'Apply configuration');
+    $expected = $before;
+    $expected['types']['node'][] = 'article';
+    $this->assertSame($expected, $this->config('content_lock.settings')->getRawData());
+    $this->assertSession()->checkboxNotChecked('protect_content');
+    $this->assertSession()->pageTextContains('Already assigned in Drupal:');
+    $this->assertSession()->pageTextContains('Enhancements are enabled for this workflow.');
+    // A client deliberately removes protection and adjusts the timeout.
+    $this->config('content_lock.settings')->set('types.node', ['page'])->set('timeout', 0)->save();
+    $client = $this->config('content_lock.settings')->getRawData();
+    $this->drupalGet('/admin/config/content/editflow');
+    $this->submitForm([], 'Review changes');
+    $this->assertSession()->pageTextContains('No changes to editing locks.');
+    $this->submitForm([], 'Apply configuration');
+    $this->assertSame($client, $this->config('content_lock.settings')->getRawData());
+    // Changes made in Content Lock after review invalidate the whole plan.
+    $this->submitForm(['protect_content' => TRUE], 'Review changes');
+    $this->config('content_lock.settings')->set('timeout', 3600)->save();
+    $this->submitForm([], 'Apply configuration');
+    $this->assertSession()->pageTextContains('Configuration changed since review');
+    $this->assertSame(['page'], $this->config('content_lock.settings')->get('types.node'));
+    $choices = ['workflow' => 'editflow', 'draft_state' => 'draft', 'publish_state' => 'published', 'bundles' => ['article'], 'enhancements' => TRUE, 'protect_content' => TRUE];
+    // All-content protection is already sufficient and must remain unchanged.
+    $this->config('content_lock.settings')->set('types.node', ['*'])->save();
+    $plan = EditflowSetup::plan($choices);
+    $this->assertSame([], $plan['lock_add']);
+    EditflowSetup::apply($choices, $plan['fingerprint']);
+    $this->assertSame(['*'], $this->config('content_lock.settings')->get('types.node'));
+    // Turning off enhancements does not add or remove lock protection.
+    $this->config('content_lock.settings')->set('types.node', ['page'])->save();
+    $choices['enhancements'] = FALSE;
+    $plan = EditflowSetup::plan($choices);
+    $this->assertSame([], $plan['lock_add']);
+    EditflowSetup::apply($choices, $plan['fingerprint']);
+    $this->assertSame(['page'], $this->config('content_lock.settings')->get('types.node'));
+  }
+
 }

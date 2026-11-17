@@ -44,10 +44,14 @@ Administer workflows, Administer permissions and Administer site configuration.
    changes to the previous selection.
 3. Select content types to add. Types belonging to another workflow cannot be
    moved here. Unchecking a type does not remove its existing assignment.
-4. Optionally choose existing dedicated editor and publisher roles. Leave these
+4. With Administer Content Lock settings permission, leave **Add editing-lock
+   protection for selected content types when applying** checked on initial setup to add protection.
+   Review lists the types to add. Existing timeout and advanced settings stay
+   unchanged. The option defaults off when revisiting an enabled workflow.
+5. Optionally choose existing dedicated editor and publisher roles. Leave these
    unchanged if permissions are already configured. This does not assign users
    to roles. Administrator, Anonymous and Authenticated roles are excluded.
-5. Choose **Review changes**, check assignments and permission grants, then
+6. Choose **Review changes**, check assignments and permission grants, then
    **Apply configuration**. Existing permissions are never removed.
 
 Role grants include editing/revision access for participating types, global
@@ -102,7 +106,14 @@ Test optional styling and page editing tabs with your site's theme.
 
 Expand **Editing locks**, then choose **Configure editing locks** to select
 protected content types, timeout and lock scope. Installing Content Lock does
-not automatically select protected types. Configure permission to break another
+not automatically select protected types; Workflow setup can add them with your
+reviewed approval. Unchecking the setup option or disabling EditFlow does not
+remove protection. Later changes made in Content Lock are preserved.
+
+By default, Content Lock uses one shared lock across Page Details and Layout.
+Existing translation-specific or form-operation settings are respected. These
+allow more independent editing, but deleting unpublished revisions requires
+shared locking and is unavailable with those advanced scopes. Configure permission to break another
 editor's lock separately.
 
 Save and continue editing keeps the lock; save and finish editing releases it.

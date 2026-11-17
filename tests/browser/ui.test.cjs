@@ -345,6 +345,32 @@ let passed = 0;
       assert.equal(await warns(), false);
       await page.close();
     });
+    await check('Interface settings warning tracks changes, reversions and reset', async () => {
+      const page = await fixture('<form data-editflow-interface-settings><input type="checkbox" name="feature" checked><input type="checkbox" name="media_table"><input type="checkbox" name="unavailable" disabled><input type="hidden" name="form_token" value="one"><div class="editflow-settings-warning" role="status" hidden>Save configuration before leaving.</div><a href="#columns">Review columns</a></form>', ['settings-warning']);
+      await attach(page);
+      await attach(page);
+      const warning = page.locator('.editflow-settings-warning');
+      assert.equal(await warning.isVisible(), false);
+      await page.locator('[name="feature"]').uncheck();
+      assert.equal(await warning.isVisible(), true);
+      assert.equal(await warning.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 244, 206)');
+      await page.locator('[name="feature"]').check();
+      assert.equal(await warning.isVisible(), false);
+      await page.locator('[name="media_table"]').check();
+      assert.equal(await warning.isVisible(), true);
+      await page.evaluate(() => document.querySelector('form').reset());
+      assert.equal(await warning.isVisible(), false);
+      await page.evaluate(() => {
+        document.querySelector('[name="form_token"]').value = 'two';
+        document.querySelector('form').dispatchEvent(new Event('change'));
+      });
+      assert.equal(await warning.isVisible(), false);
+      await detach(page);
+      await attach(page);
+      await page.locator('[name="feature"]').uncheck();
+      assert.equal(await warning.isVisible(), true);
+      await page.close();
+    });
     assert.deepEqual(errors, [], 'No browser errors');
     console.log(`${passed} browser scenarios passed; no browser errors.`);
   } finally { await browser.close(); }
